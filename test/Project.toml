@@ -1,0 +1,12 @@
+[deps]
+CasualtyRisk = "91a2d5e9-5392-4fd1-bc7c-f9e3b2d7757c"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OrbitalElementModels = "063a652d-9493-49e5-961b-686ce72b7d9a"
+SatelliteToolboxAtmosphericModels = "5718ef0a-a30f-426d-bcd9-4cf31dd12909"
+SatelliteToolboxBase = "9e17983a-0463-41a7-9a16-1682db6d8b66"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+CasualtyRisk = {path = ".."}
