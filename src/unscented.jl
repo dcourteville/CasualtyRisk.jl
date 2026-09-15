@@ -16,6 +16,7 @@ end
 function from_sigma_points(s, w)
     μ = sum(i -> w[i] * s[i], eachindex(s, w))
     Σ = sum(i -> (δ = s[i] - μ; w[i] * δ * δ'), eachindex(s, w))
+    Σ = (Σ + Σ') / 2
     return μ, Σ
 end
 
