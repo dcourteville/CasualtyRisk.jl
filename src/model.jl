@@ -1,7 +1,7 @@
 using OrbitalElementModels
 using OrdinaryDiffEqTsit5
 
-export ReentryModel
+export ReentryModel, nb_revolutions
 
 function apsalt2mce(ha, hp, ω, i, Ω, ν, body)
     # Convert to keplerian
@@ -27,7 +27,7 @@ function reentry2geo(x)
     sΛ, cΛ = sincos(Λ)
     sα, cα = sincos(α)
     ϕ = asin(si*sα)
-    λ = atan(sΛ*cα - cΛ*ci*sα, cΛ*cα - sΛ*ci*sα)
+    λ = atan(sΛ*cα + cΛ*ci*sα, cΛ*cα - sΛ*ci*sα)
     return SA[ϕ, λ]
 end
 
@@ -73,4 +73,10 @@ function reentry_shooting(model::ReentryModel, X)
     @assert tf < tmax "Propagation did not reach stop condition before time limit"
     xf = sol.u[end]
     return mce2reentry(xf, tf, model.body)
+end
+
+function nb_revolutions(model, X)
+    x0 = convert_orbit(apsalt2mce, X[SOneTo(7)], model.body)
+    xr = reentry_shooting(model, X)
+    return (xr[3] - x0[6]) / 2π
 end

@@ -23,4 +23,8 @@ function impact_map(mean, cov, inc)
     return fig, ax
 end
 
-impact_map(μr, Σr) = impact_map(μr[2:3], Σr[2:3,2:3], μr[1])
+function impact_map(reentry_dist)
+    μr = mean(reentry_dist)
+    Σr = cov(reentry_dist)
+    return impact_map(μr[2:3], Σr[2:3,2:3], μr[1])
+end

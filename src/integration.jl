@@ -1,4 +1,4 @@
-using FastGaussQuadrature, LinearAlgebra
+using FastGaussQuadrature, LinearAlgebra, ShiftedArrays
 
 export compute_casualty_risk
 
@@ -48,13 +48,30 @@ function impact_density(x, i, dist, sum_range)
     return pdf_sum
 end
 
-struct DistributionProjection{T}
+struct ProjectedDistribution{T}
     base_dist::T
     i::Float64
     sum_range::Tuple{Int64,Int64}
 end
 
-function impact_density(x, dist::DistributionProjection)
+function ProjectedDistribution(reentry_distribution; σcut=2)
+    μr = mean(reentry_distribution)
+    Σr = cov(reentry_distribution)
+    dist = MvNormal(
+        SA[mod2pi(μr[2]), mod2pi(μr[3])],
+        SA[
+            Σr[2, 2] Σr[2, 3]
+            Σr[3, 2] Σr[3, 3]
+        ]
+    )
+    sum_range = (
+        ceil(Int, σcut * sqrt(cov(dist)[1, 1]) / π),
+        ceil(Int, σcut * sqrt(cov(dist)[2, 2]) / π)
+    )
+    return ProjectedDistribution{typeof(dist)}(dist, μr[1], sum_range)
+end
+
+function impact_density(x, dist::ProjectedDistribution)
     impact_density(x, dist.i, dist.base_dist, dist.sum_range)
 end
 
@@ -104,22 +121,57 @@ Compute the casualty risk over all the given cells
 - `n_quad`: Order of the gauss quadrature for each cell
 - `σcut`: Truncation limit of the gaussian distribution
 """
-function integrate_casualty_risk(pop_data, μ, Σ, i; casualty_area=1.0, n_quad=3, σcut=2)
+function integrate_casualty_risk(dist::ProjectedDistribution, pop_data; casualty_area=1.0, n_quad=3)
     # Integration problem
-    smean = SVector{2}(mod2pi.(μ))
-    scov = SMatrix{2,2}(Σ)
-    dist = MvNormal(smean, scov)
-    sum_range = (
-        ceil(Int, σcut * sqrt(scov[1, 1]) / π),
-        ceil(Int, σcut * sqrt(scov[2, 2]) / π)
-    )
     algo = zip(bivariate_gausslegendre(n_quad)...)
-    map_dist = DistributionProjection(dist, i, sum_range)
 
     # Maximum reachable latitude
-    ϕlim = asin(sin(i))
+    ϕlim = asin(sin(dist.i))
 
     # Integrate for each cell
-    total_risk = sum(cell -> cell_casualty_risk(cell, ϕlim, map_dist, algo), pop_data)
+    total_risk = sum(cell -> cell_casualty_risk(cell, ϕlim, dist, algo), pop_data.grid)
+    return casualty_area * total_risk
+end
+
+############################################################
+# Casualty risk computation with a precomputed probability #
+# grid to enable longitude shifting
+############################################################
+
+struct ProbabilityGrid
+    grid::Matrix{Float64}
+end
+
+function ProbabilityGrid(dist::ProjectedDistribution, pop_data; n_quad=3)
+    # Integration problem
+    algo = zip(bivariate_gausslegendre(n_quad)...)
+
+    # Maximum reachable latitude
+    ϕlim = asin(sin(dist.i))
+
+    grid = map(pop_data.grid) do cell
+        ((ϕmin, ϕmax, λmin, λmax), pop) = cell
+        if ϕmin >= ϕlim || ϕmax <= -ϕlim
+            # Cell is outside the reachable latitudes
+            return 0.0
+        else
+            # Restrict latitude range to reachable values according to inclination
+            ϕmin = max(ϕmin, -ϕlim)
+            ϕmax = min(ϕmax, ϕlim)
+            # Compute impact probability
+            return impact_probability(ϕmin, ϕmax, λmin, λmax, dist, algo)
+        end
+    end
+    return ProbabilityGrid(grid)
+end
+
+
+function integrate_casualty_risk(proba_grid::ProbabilityGrid, pop_data, shift; casualty_area=1.0)
+    # Shift the probability distribution longitudinally
+    shift_grid = ShiftedArrays.circshift(proba_grid.grid, (0, shift))
+    # Sum for each cell
+    total_risk = sum(zip(shift_grid, pop_data.grid)) do (proba, cell)
+        return pop_density(cell) * proba
+    end
     return casualty_area * total_risk
 end

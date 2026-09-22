@@ -18,5 +18,9 @@ OnlineStats = "a15396b6-48d5-5d58-9928-6d29437db91e"
 OrbitalElementModels = "063a652d-9493-49e5-961b-686ce72b7d9a"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 SatelliteToolboxBase = "9e17983a-0463-41a7-9a16-1682db6d8b66"
+ShiftedArrays = "1277b4bf-5013-50f5-be3d-901d8477a67a"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 ThreadsX = "ac1d9e8a-700a-412c-b207-f0111f4b6c0d"
+
+[compat]
+ShiftedArrays = "2.0.0"

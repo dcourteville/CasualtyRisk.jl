@@ -5,15 +5,17 @@ export mc_reentry_simulation, mc_casualty_risk
 Compute reentry distribution
 """
 function compute_reentry_distibution(model, X, Σ)
-    return unscented_transform(Xi -> reentry_shooting(model, Xi), X, Σ, similar_type(X, Size(5)))
+    μr, Σr = unscented_transform(Xi -> reentry_shooting(model, Xi), X, Σ, similar_type(X, Size(5)))
+    return MvNormal(μr, Σr)
 end
 
 """
 Compute total casualty risk
 """
-function compute_casualty_risk(model, X, Σ, pop_data, args...; kwargs...)
-    μr, Σr = compute_reentry_distibution(model, X, Σ)
-    return integrate_casualty_risk(pop_data, μr[2:3], Σr[2:3,2:3], μr[1], args...; kwargs...)
+function compute_casualty_risk(model, X, Σ, pop_data; σcut=2, casualty_area=1.0, n_quad=3)
+    reentry_dist = compute_reentry_distibution(model, X, Σ)
+    proj_dist = ProjectedDistribution(reentry_dist; σcut)
+    return integrate_casualty_risk(proj_dist, pop_data; casualty_area, n_quad)
 end
 
 """
@@ -42,10 +44,25 @@ function mc_casualty_risk(model, X, Σ, pop_data; kwargs...)
     return mc_casualty_risk(points, pop_data)
 end
 
-function mapΛ(model, X, Σ, pop_data, Λgrid=0:359, args...; kwargs...)
-    Rgrid = ThreadsX.map(Λgrid) do Λ
-        XΛ = @set X[5] = deg2rad(Λ)
-        return compute_casualty_risk(model, XΛ, Σ, pop_data, args...; kwargs...)
+function map_longitude_shifts(model, X, Σ, pop_data, shifts=0:359; kwargs...)
+    Rgrid = ThreadsX.map(shifts) do Λ
+        # Shifting time instead of RAAN is more accurate
+        # It preserves the same orientation relative to the Sun
+        #XΛ = @set X[5] = X[5] + mod2pi(deg2rad(Λ)) # Shift RAAN
+        XΛ = @set X[8] = X[8] - mod2pi(deg2rad(Λ)) / EARTH_ANGULAR_SPEED # Shift time
+        return compute_casualty_risk(model, XΛ, Σ, pop_data; kwargs...)
     end
     return Rgrid
+end
+
+function map_longitude_shifts_fast(model, X, Σ, pop_data; σcut=2, casualty_area=1.0, n_quad=3)
+    reentry_dist = compute_reentry_distibution(model, X, Σ)
+    proj_dist = ProjectedDistribution(reentry_dist; σcut)
+    grid_dist = ProbabilityGrid(proj_dist, pop_data; n_quad)
+
+    shifts = (0:(size(grid_dist.grid, 2)-1))
+    return map(
+        shift -> integrate_casualty_risk(grid_dist, pop_data, shift; casualty_area),
+        shifts
+    )
 end
